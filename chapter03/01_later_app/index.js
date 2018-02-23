@@ -4,71 +4,98 @@ const morgan = require('morgan');
 const read = require('node-readability');
 
 const Article = require('./db').Article;
+const db = new Article();
+// init db
+db.init();
 
+// Set up express and morgan for logging
 const app = express();
+const PORT = process.env.PORT || 3030;
 app.use(morgan('dev'));
-app.set('port', process.env.PORT || 3000);
 
-
+// Set up body parser
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
+// GET /articles
+// Retrieve all articles from database
 app.get('/articles', async (req, res, next) => {
   try {
-    await Article.all((err, articles) => {
-      if (err) {
-        return err;
-      }
-      res.send(articles);
-    });
+    const articles = await db.all();
+    res.json(articles);
   } catch (err) {
     return next(err);
   }
 });
 
+// POST /articles
+// Look for an article supplied by a url object in body, and stor readable
+// version in database
 app.post('/articles', async (req, res, next) => {
   try {
     const url = req.body.url;
     await read(url, async (err, result) => {
-      try {
-        if (!result) {
-          const err = new Error('Error downloading article');
-          err.status = 500;
-          return next(err);
-        }
-        await Article.create({ title: result.title, content: result.content });
-        res.send('OK');
-      } catch (err) {
+      if (!result) {
+        const err = new Error('Error downloading article');
+        err.status = 500;
         return next(err);
       }
+      await db.create({ title: result.title, content: result.content });
+      res.json({ status: 'Article saved' });
     });
   } catch (err) {
     return next(err);
   }
 });
 
+// GET /articles/:id
+// Look for a specific article
 app.get('/articles/:id', async (req, res, next) => {
   try {
     const id = req.params.id;
-    const article = await Article.find(id);
-    res.send(article);
+    const article = await db.find(id, next);
+    res.json(article);
   } catch (err) {
     return next(err);
   }
 });
 
+// DELETE /articles/:id
+// Handles deleting an article from database
 app.delete('/articles/:id', async (req, res, next) => {
   try {
     const id = req.params.id;
-    await Article.delete(id);
+    await db.delete(id);
     res.send({ message: 'Deleted' });
   } catch (err) {
     return next(err);
   }
 });
 
-app.listen(app.get('port'), () => {
-  console.log(`App started on port ${app.get('port')}`);
+// Handle 404 Not Found
+app.use((req, res, next) => {
+  const err = new Error('Not Found');
+  err.status = 404;
+  return next(err);
+});
+
+// Handle other errors
+app.use((err, req, res, next) => { //eslint-disable-line no-unused-vars
+  if (!err.status) {
+    const error = new Error(`Internal Server error: ${err.message}`);
+    error.status = 500;
+    return res.json({ error });
+  }
+  const error = {
+    status: err.status,
+    message: err.message,
+  };
+  return res.json({ error });
+});
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`App started on port ${PORT}`);
 });
 
 module.exports = { app };
