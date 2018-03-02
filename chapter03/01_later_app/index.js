@@ -17,12 +17,25 @@ app.use(morgan('dev'));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
+// Set up static content
+app.use(
+  '/css/bootstrap.css',
+  express.static('./node_modules/bootstrap/dist/css/bootstrap.min.css')
+);
+
 // GET /articles
 // Retrieve all articles from database
 app.get('/articles', async (req, res, next) => {
   try {
     const articles = await db.all();
-    res.json(articles);
+    res.format({
+      html: () => {
+        res.render('articles.ejs', { articles });
+      },
+      json: () => {
+        res.json(articles);
+      }
+    });
   } catch (err) {
     return next(err);
   }
